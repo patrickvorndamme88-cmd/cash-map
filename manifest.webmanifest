@@ -1,0 +1,49 @@
+{
+  "name": "cash-map — Monatlicher Geldfluss & Töpfe",
+  "short_name": "cash-map",
+  "description": "Deine persönliche Übersicht über Nettogehalt, Monatsbudgets, Ausgaben und automatisch wachsende Kategoriekonten.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090B10",
+  "theme_color": "#090B10",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ausgabe eintragen",
+      "short_name": "Ausgabe",
+      "description": "Schnell eine neue Ausgabe erfassen",
+      "url": "./?action=add",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Cash-Map Analyse",
+      "short_name": "Cash-Map",
+      "description": "Monatlichen Geldfluss anzeigen",
+      "url": "./?tab=analytics",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

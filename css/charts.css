@@ -1,0 +1,265 @@
+/* ==========================================================================
+   cash-map — Custom SVG Charts, Sankey Cash-Flow Map & Analytics Widgets
+   ========================================================================== */
+
+.chart-card {
+  background: var(--surface-1);
+  background-image: var(--surface-card-highlight);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chart-title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.chart-subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* ---- Cash-Flow Sankey Map ---- */
+.sankey-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sankey-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.sankey-link {
+  fill: none;
+  stroke-opacity: 0.34;
+  transition: stroke-opacity 180ms ease;
+}
+
+.sankey-link:hover {
+  stroke-opacity: 0.65;
+}
+
+.sankey-node-label {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 650;
+  fill: var(--text-primary);
+}
+
+.sankey-node-val {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 600;
+  fill: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Donut Chart + Legend ---- */
+.donut-layout {
+  display: grid;
+  grid-template-columns: 152px 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+@media (max-width: 360px) {
+  .donut-layout {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+}
+
+.donut-svg-wrap {
+  position: relative;
+  width: 152px;
+  height: 152px;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut-center-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.donut-center-val {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-top: 2px;
+}
+
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-xs);
+}
+
+.legend-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-val {
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ---- 6-Month Bar & Line Chart ---- */
+.bar-chart-svg {
+  width: 100%;
+  height: auto;
+}
+
+.chart-axis-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--text-tertiary);
+}
+
+.chart-grid-line {
+  stroke: var(--border-subtle);
+  stroke-dasharray: 3 3;
+}
+
+.chart-legend-inline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.chart-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- Analytics Summary Grid ---- */
+.stats-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+.stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.stat-val {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  margin-top: 4px;
+}
+
+.stat-sub {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+}
+
+/* ---- Pot Leaderboard Rows ---- */
+.pot-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pot-rank-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pot-rank-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+}
+
+.pot-rank-bar-bg {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--track-bg);
+  overflow: hidden;
+}
+
+.pot-rank-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 420ms var(--ease-spring);
+}

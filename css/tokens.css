@@ -1,0 +1,159 @@
+/* ==========================================================================
+   cash-map — Design Tokens (Midnight Obsidian Dark & Crisp Porcelain Light)
+   ========================================================================== */
+
+:root {
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type Scale */
+  --text-2xs: 0.6875rem;  /* 11px */
+  --text-xs:  0.75rem;    /* 12px */
+  --text-sm:  0.84375rem; /* 13.5px */
+  --text-md:  0.9375rem;  /* 15px */
+  --text-lg:  1.0625rem;  /* 17px */
+  --text-xl:  1.25rem;    /* 20px */
+  --text-2xl: 1.625rem;   /* 26px */
+  --text-3xl: 2.125rem;   /* 34px */
+
+  /* Radii */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Spacing & Layout */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --app-max-width: 520px;
+  --header-height: 60px;
+  --tabbar-height: 68px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Motion */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-med: 260ms;
+  --dur-slow: 420ms;
+
+  /* Brand & Semantic Accents (Dark Defaults) */
+  --accent: #5B8CFF;
+  --accent-strong: #3E74FF;
+  --accent-soft: rgba(91, 140, 255, 0.16);
+  --accent-glow: rgba(91, 140, 255, 0.32);
+
+  --positive: #10D99B;
+  --positive-strong: #0AB882;
+  --positive-soft: rgba(16, 217, 155, 0.14);
+  --positive-border: rgba(16, 217, 155, 0.28);
+
+  --negative: #FF5C77;
+  --negative-strong: #F23D5D;
+  --negative-soft: rgba(255, 92, 119, 0.14);
+  --negative-border: rgba(255, 92, 119, 0.28);
+
+  --warning: #F5B942;
+  --warning-soft: rgba(245, 185, 66, 0.15);
+  --warning-border: rgba(245, 185, 66, 0.30);
+
+  --violet: #A78BFA;
+  --violet-soft: rgba(167, 139, 250, 0.16);
+
+  /* Dark Theme Surfaces — Midnight Obsidian */
+  --bg-canvas: #090B10;
+  --bg-ambient-1: rgba(91, 140, 255, 0.12);
+  --bg-ambient-2: rgba(16, 217, 155, 0.09);
+
+  --surface-1: #121622;
+  --surface-2: #181E2E;
+  --surface-3: #20283D;
+  --surface-glass: rgba(14, 18, 28, 0.78);
+  --surface-sheet: #131826;
+  --surface-hero: linear-gradient(145deg, #161F36 0%, #101627 52%, #0D1620 100%);
+  --surface-card-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0) 40%);
+
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-default: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text-primary: #F4F7FC;
+  --text-secondary: #9AA5BC;
+  --text-tertiary: #67728A;
+  --text-on-accent: #FFFFFF;
+
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-hero: 0 18px 44px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  --shadow-sheet: 0 -16px 48px rgba(0, 0, 0, 0.65);
+  --shadow-fab: 0 10px 26px rgba(91, 140, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  --track-bg: rgba(255, 255, 255, 0.08);
+  --backdrop: rgba(4, 6, 12, 0.68);
+}
+
+/* Light Theme — Crisp Porcelain */
+[data-theme="light"] {
+  --accent: #2563EB;
+  --accent-strong: #1D4ED8;
+  --accent-soft: rgba(37, 99, 235, 0.10);
+  --accent-glow: rgba(37, 99, 235, 0.24);
+
+  --positive: #059669;
+  --positive-strong: #047857;
+  --positive-soft: rgba(5, 150, 105, 0.10);
+  --positive-border: rgba(5, 150, 105, 0.24);
+
+  --negative: #E11D48;
+  --negative-strong: #BE123C;
+  --negative-soft: rgba(225, 29, 72, 0.09);
+  --negative-border: rgba(225, 29, 72, 0.22);
+
+  --warning: #D97706;
+  --warning-soft: rgba(217, 119, 6, 0.11);
+  --warning-border: rgba(217, 119, 6, 0.24);
+
+  --violet: #7C3AED;
+  --violet-soft: rgba(124, 58, 237, 0.10);
+
+  --bg-canvas: #F3F5FA;
+  --bg-ambient-1: rgba(37, 99, 235, 0.07);
+  --bg-ambient-2: rgba(5, 150, 105, 0.06);
+
+  --surface-1: #FFFFFF;
+  --surface-2: #F7F9FC;
+  --surface-3: #EDF1F8;
+  --surface-glass: rgba(243, 245, 250, 0.82);
+  --surface-sheet: #FFFFFF;
+  --surface-hero: linear-gradient(145deg, #131D36 0%, #1C294A 55%, #122831 100%);
+  --surface-card-highlight: none;
+
+  --border-subtle: rgba(15, 23, 42, 0.06);
+  --border-default: rgba(15, 23, 42, 0.10);
+  --border-strong: rgba(15, 23, 42, 0.16);
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-tertiary: #8492A6;
+  --text-on-accent: #FFFFFF;
+
+  --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.045), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-hero: 0 16px 38px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --shadow-sheet: 0 -14px 40px rgba(15, 23, 42, 0.18);
+  --shadow-fab: 0 10px 24px rgba(37, 99, 235, 0.36), 0 2px 6px rgba(15, 23, 42, 0.12);
+
+  --track-bg: rgba(15, 23, 42, 0.075);
+  --backdrop: rgba(15, 23, 42, 0.44);
+}

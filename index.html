@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>cash-map — Dein Geldfluss &amp; Kategoriekonten</title>
+  <meta name="description" content="Persönliche iPhone Web-App für monatliches Nettogehalt, Budgetplanung, Ausgaben und wachsende Kategoriekonten." />
+
+  <!-- PWA & iOS Home Screen Meta -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#090B10" id="theme-color-meta" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="cash-map" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
+
+  <!-- Anti-FOUC Theme Initialization -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('cashmap_state_v1');
+        var pref = 'auto';
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.settings && parsed.settings.theme) {
+            pref = parsed.settings.theme;
+          }
+        }
+        var isDark = pref === 'dark' || (pref === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var theme = isDark ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        var meta = document.getElementById('theme-color-meta');
+        if (meta) meta.setAttribute('content', isDark ? '#090B10' : '#F3F5FA');
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="./css/tokens.css" />
+  <link rel="stylesheet" href="./css/base.css" />
+  <link rel="stylesheet" href="./css/components.css" />
+  <link rel="stylesheet" href="./css/charts.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- Persistent Top Glass Header -->
+    <header id="app-header" class="app-header" aria-label="Navigation und Monatswahl"></header>
+
+    <!-- Main Scrollable Viewport -->
+    <main id="app-main" class="app-main" tabindex="-1"></main>
+
+    <!-- Persistent Bottom Tab Bar with Central Quick-Add -->
+    <nav id="app-tabbar" class="app-tabbar" aria-label="Hauptnavigation"></nav>
+
+    <!-- Modal / Bottom Sheet Host -->
+    <div id="sheet-root" class="sheet-root" aria-hidden="true"></div>
+
+    <!-- Onboarding Overlay Host -->
+    <div id="onboarding-root" class="onboarding-root" aria-hidden="true"></div>
+
+    <!-- Toast / Undo Snackbar Host -->
+    <div id="toast-root" class="toast-root" role="status" aria-live="polite"></div>
+  </div>
+
+  <!-- Hidden file input for JSON Backup Restore -->
+  <input id="global-import-file" type="file" accept=".json,application/json" hidden />
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
