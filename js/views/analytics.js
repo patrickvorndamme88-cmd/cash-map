@@ -40,6 +40,30 @@ export function renderAnalyticsView(state, ui, snapshot) {
     })
     .join('');
 
+  const pillarsHtml = snapshot.groups
+    .map((g) => {
+      const sharePct = snapshot.salary > 0 ? Math.round((g.budget / snapshot.salary) * 100) : 0;
+      const fillPct = g.budget > 0 ? Math.min(100, (g.netSpent / g.budget) * 100) : 0;
+      return `
+        <div class="pillar-row">
+          <div class="pillar-top">
+            <span style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:var(--text-xs);">
+              <span class="legend-dot" style="background:${g.color};"></span>
+              ${escapeHtml(g.label)}
+              <span class="text-dim" style="font-weight:600;">${sharePct} %</span>
+            </span>
+            <span class="money" style="font-size:var(--text-xs);font-weight:700;">
+              ${escapeHtml(formatMoney(g.netSpent, { privacy, compact: true }))} <span class="text-dim" style="font-weight:500;">/ ${escapeHtml(formatMoney(g.budget, { privacy, compact: true }))}</span>
+            </span>
+          </div>
+          <div class="pot-rank-bar-bg" style="height:6px;">
+            <div class="pot-rank-bar-fill" style="width:${fillPct.toFixed(1)}%;background:${g.color};"></div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
   return `
     <div class="section-head">
       <h2 class="section-title">Cash-Map Analyse</h2>
@@ -73,11 +97,24 @@ export function renderAnalyticsView(state, ui, snapshot) {
       </div>
 
       <div class="stat-card">
-        <div class="stat-label">Investiert (${escapeHtml(snapshot.monthKey.slice(5))}/${snapshot.monthKey.slice(2, 4)})</div>
+        <div class="stat-label">Investiert im Monat</div>
         <div class="stat-val money" style="color:var(--violet);">
           ${escapeHtml(formatMoney(snapshot.investedThisMonth, { privacy, compact: true }))}
         </div>
-        <div class="stat-sub">Aktiensparplan &amp; Co.</div>
+        <div class="stat-sub">Seit Start: <span class="money">${escapeHtml(formatMoney(snapshot.cumulativeInvested, { privacy, compact: true }))}</span></div>
+      </div>
+    </section>
+
+    <!-- 4-Säulen-Überblick (Fixkosten, Alltag, Rücklagen, Sparen & Investieren) -->
+    <section class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Deine 4 Geld-Säulen</div>
+          <div class="chart-subtitle">Ausgegeben vs. Budget nach Verwendungszweck (% vom Gehalt)</div>
+        </div>
+      </div>
+      <div class="pot-rank-list">
+        ${pillarsHtml}
       </div>
     </section>
 
@@ -111,8 +148,8 @@ export function renderAnalyticsView(state, ui, snapshot) {
     <section class="chart-card">
       <div class="chart-header">
         <div>
-          <div class="chart-title">6-Monats-Verlauf</div>
-          <div class="chart-subtitle">Einnahmen vs. Ausgaben im Vergleich</div>
+          <div class="chart-title">${series.length > 1 ? `Verlauf der letzten ${series.length} Monate` : 'Verlauf'}</div>
+          <div class="chart-subtitle">Einnahmen vs. Ausgaben – ab deinem Tracking-Beginn</div>
         </div>
       </div>
       ${renderSixMonthChart(series, { privacy })}

@@ -2,7 +2,7 @@
 // cash-map — Offline-First Service Worker (GitHub Pages Subpath Compatible)
 // ==========================================================================
 
-const CACHE_NAME = 'cash-map-v1.0.1';
+const CACHE_NAME = 'cash-map-v1.2.0';
 
 const PRECACHE_ASSETS = [
   './',
@@ -18,6 +18,7 @@ const PRECACHE_ASSETS = [
   './css/components.css',
   './css/charts.css',
   './js/app.js',
+  './js/ui.js',
   './js/store.js',
   './js/defaults.js',
   './js/finance.js',
@@ -32,6 +33,7 @@ const PRECACHE_ASSETS = [
   './js/views/modals.js',
   './js/views/settings.js',
   './js/views/onboarding.js',
+  './js/views/monthpicker.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -62,8 +64,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put('./index.html', copy));
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put('./index.html', copy));
+          }
           return res;
         })
         .catch(() => caches.match('./index.html'))
@@ -71,7 +75,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate for instant cold start & automatic GitHub updates
+  // Code, styles & manifest: network-first so ES module updates on GitHub Pages are always atomic,
+  // falling back immediately to precache when offline (airplane mode / poor reception).
+  const isCodeOrStyle = /\.(js|mjs|css|webmanifest|json)$/i.test(url.pathname);
+  if (isCodeOrStyle) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Binary assets (icons/images): cache-first with background refresh
   event.respondWith(
     caches.match(req).then((cached) => {
       const networkFetch = fetch(req)

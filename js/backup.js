@@ -129,7 +129,8 @@ export function parseAndValidateBackup(rawText) {
     };
   }
 
-  const defaultMonth = payload.settings?.startMonth || getCurrentMonthKey();
+  const rawStart = String(payload.settings?.startMonth || '');
+  const defaultMonth = /^\d{4}-\d{2}$/.test(rawStart) ? rawStart : getCurrentMonthKey();
 
   // Normalize categories cleanly
   const normalizedCategories = payload.categories.map((c, idx) => {
@@ -147,7 +148,9 @@ export function parseAndValidateBackup(rawText) {
       color: String(c.color || '#5B8CFF'),
       group: ['fixed', 'daily', 'reserve', 'invest'].includes(c.group) ? c.group : 'daily',
       isFixed: Boolean(c.isFixed),
+      bookingDay: c.isFixed ? Math.min(28, Math.max(1, Math.round(Number(c.bookingDay) || 1))) : null,
       rollover: c.rollover !== false,
+      surplusTargetId: c.surplusTargetId ? String(c.surplusTargetId) : null,
       initialBalance: roundCents(Number(c.initialBalance) || 0),
       goalAmount: c.goalAmount && Number(c.goalAmount) > 0 ? roundCents(Number(c.goalAmount)) : null,
       note: String(c.note || ''),
@@ -198,6 +201,8 @@ export function parseAndValidateBackup(rawText) {
       onboardingCompleted: true,
       lastBackupAt: parsed.exportedAt || payload.settings?.lastBackupAt || new Date().toISOString(),
       installHintDismissed: Boolean(payload.settings?.installHintDismissed),
+      recapDismissed: typeof payload.settings?.recapDismissed === 'string' ? payload.settings.recapDismissed : null,
+      backupReminderSnoozedAt: null,
     },
     salaryHistory: normalizedSalaryHistory,
     salaryOverrides: normalizedOverrides,

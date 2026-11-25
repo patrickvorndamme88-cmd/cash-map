@@ -3,6 +3,7 @@
 // ==========================================================================
 
 import { formatMoney, formatMonthNameOnly, escapeHtml, roundCents } from './format.js';
+import { CATEGORY_GROUPS } from './defaults.js';
 
 /**
  * Renders the signature Cash-Flow Sankey Diagram (Nettogehalt -> Gruppen -> Kategorien / Töpfe).
@@ -64,13 +65,12 @@ export function renderCashFlowSankey(snapshot, { mode = 'plan', privacy = false 
 
   targets.sort((a, b) => b.amount - a.amount);
 
-  // Build middle nodes (groups)
-  const groupOrder = [
-    { id: 'fixed', label: 'Fixkosten', color: '#5B8CFF' },
-    { id: 'daily', label: 'Alltag', color: '#10D99B' },
-    { id: 'invest', label: 'Investition', color: '#A78BFA' },
-    { id: 'reserve', label: isPlan ? 'Rücklagen' : 'Rückl. & Spar-Plus', color: '#F5B942' },
-  ];
+  // Build middle nodes (groups) — same names & order as everywhere else in the app
+  const groupOrder = CATEGORY_GROUPS.map((g) => ({
+    id: g.id,
+    label: g.id === 'reserve' && !isPlan ? 'Rücklagen & Plus' : g.short,
+    color: g.color,
+  }));
 
   const groups = groupOrder
     .map((g) => {

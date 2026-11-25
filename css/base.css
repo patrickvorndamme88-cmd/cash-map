@@ -268,7 +268,6 @@ svg {
   flex-direction: column;
   gap: var(--space-4);
   outline: none;
-  animation: viewFadeIn 220ms var(--ease-spring);
 }
 
 @keyframes viewFadeIn {
@@ -454,3 +453,75 @@ svg {
 .text-dim { color: var(--text-tertiary); }
 .flex-1 { flex: 1; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ==========================================================================
+   v1.1 — Scroll lock, view animations, reduced motion
+   ========================================================================== */
+
+/* Page behind sheets/onboarding must never scroll (fixes ghost scrollbar on iPhone) */
+html.scroll-locked,
+html.scroll-locked body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.app-shell.is-onboarding > .app-header,
+.app-shell.is-onboarding > .app-main,
+.app-shell.is-onboarding > .app-tabbar {
+  display: none !important;
+}
+
+.app-main.anim-fade { animation: viewFadeIn 220ms var(--ease-spring); }
+.app-main.anim-next { animation: monthSlideNext 300ms var(--ease-spring); }
+.app-main.anim-prev { animation: monthSlidePrev 300ms var(--ease-spring); }
+
+@keyframes monthSlideNext {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes monthSlidePrev {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Month switcher states */
+.month-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.month-nav-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.month-label-btn svg {
+  opacity: 0.5;
+  margin-left: -1px;
+}
+
+.month-dot-future {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+}
+
+.icon-btn-sm {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.inline-icon {
+  display: inline-block;
+  vertical-align: -1.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

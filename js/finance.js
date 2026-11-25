@@ -13,8 +13,11 @@ import {
 } from './format.js';
 import { CATEGORY_GROUPS } from './defaults.js';
 
+/** How far into the future the user may navigate for planning. */
+export const FUTURE_PLANNING_MONTHS = 12;
+
 /**
- * Resolves an effective value from a sorted history array [{ effectiveFrom: 'YYYY-MM', amount }]
+ * Resolves an effective value from a history array [{ effectiveFrom: 'YYYY-MM', amount }]
  */
 export function resolveHistoryValue(history, monthKey, fallback = 0) {
   if (!Array.isArray(history) || history.length === 0) return roundCents(fallback);
@@ -45,24 +48,41 @@ export function getEffectiveBudget(category, monthKey) {
   return resolveHistoryValue(category.budgetHistory, monthKey, 0);
 }
 
+export function getBookingDay(category) {
+  const d = Math.round(Number(category?.bookingDay) || 1);
+  return Math.min(28, Math.max(1, d));
+}
+
 /**
- * Finds the earliest active month from settings.startMonth and existing transactions.
+ * Earliest active month = settings.startMonth (or an earlier transaction, if any exists).
  */
 export function getTimelineStartMonth(state) {
   let earliest = state.settings?.startMonth || getCurrentMonthKey();
   for (const tx of state.transactions || []) {
     if (!tx.date) continue;
     const mk = monthKeyFromDate(tx.date);
-    if (compareMonthKeys(mk, earliest) < 0) {
-      earliest = mk;
-    }
+    if (compareMonthKeys(mk, earliest) < 0) earliest = mk;
   }
   return earliest;
 }
 
 /**
- * Groups transactions by monthKey for O(N) single-pass chronological evaluation.
+ * Navigable month range: from tracking start up to 12 months into the future.
  */
+export function getMonthBounds(state) {
+  const min = getTimelineStartMonth(state);
+  let max = shiftMonthKey(getCurrentMonthKey(), FUTURE_PLANNING_MONTHS);
+  if (compareMonthKeys(min, max) > 0) max = min;
+  return { min, max };
+}
+
+export function clampMonthKey(state, monthKey) {
+  const { min, max } = getMonthBounds(state);
+  if (compareMonthKeys(monthKey, min) < 0) return min;
+  if (compareMonthKeys(monthKey, max) > 0) return max;
+  return monthKey;
+}
+
 function indexTransactionsByMonth(transactions) {
   const byMonth = new Map();
   for (const tx of transactions || []) {
@@ -75,35 +95,81 @@ function indexTransactionsByMonth(transactions) {
 }
 
 /**
- * Computes full financial snapshot for a specific monthKey, including exact
- * cumulative rollover balances (Kategoriekonten) carried from timeline start.
+ * Resolves valid surplus forwarding target category (if configured & active).
+ */
+export function resolveSurplusTarget(cat, activeCatMap) {
+  const tid = cat?.surplusTargetId;
+  if (!tid || tid === cat.id) return null;
+  return activeCatMap.get(tid) || null;
+}
+
+/**
+ * Computes the full financial snapshot for `targetMonth`, including exact
+ * cumulative rollover balances (Kategoriekonten) AND automatic month-end
+ * surplus sweeps (`surplusTargetId`, e.g. unused Sauna budget -> Puffer).
  */
 export function computeMonthSnapshot(state, targetMonth) {
   const categories = [...(state.categories || [])]
     .filter((c) => !c.archived)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  const activeCatMap = new Map(categories.map((c) => [c.id, c]));
   const txByMonth = indexTransactionsByMonth(state.transactions);
   const timelineStart = getTimelineStartMonth(state);
+  const currentKey = getCurrentMonthKey();
 
   const isBeforeTimeline = compareMonthKeys(targetMonth, timelineStart) < 0;
-  const monthsToWalk = isBeforeTimeline
-    ? [targetMonth]
-    : listMonthsBetween(timelineStart, targetMonth);
+  const monthsToWalk = isBeforeTimeline ? [targetMonth] : listMonthsBetween(timelineStart, targetMonth);
 
-  // Initialize running pot balances per category
   const runningPot = new Map();
   for (const cat of categories) {
     runningPot.set(cat.id, isBeforeTimeline ? 0 : roundCents(cat.initialBalance || 0));
   }
 
+  let cumulativeInvested = 0;
   let finalCategoryStats = [];
   let finalMonthTxs = [];
 
-  for (const mk of monthsToWalk) {
+  for (let mIdx = 0; mIdx < monthsToWalk.length; mIdx++) {
+    const mk = monthsToWalk[mIdx];
+    const isFirstWalkMonth = mIdx === 0;
     const monthTxs = txByMonth.get(mk) || [];
+    const isFutureMonth = compareMonthKeys(mk, currentKey) > 0;
 
-    // Aggregate per-category figures for this month
+    // 1. Compute month-boundary surplus sweeps from the END of the previous month (mIdx - 1)
+    const ownCarryMap = new Map();
+    const sweptInSourcesMap = new Map(); // catId -> [{ categoryId, name, amount }]
+
+    if (isFirstWalkMonth) {
+      for (const cat of categories) {
+        ownCarryMap.set(cat.id, cat.rollover ? (runningPot.get(cat.id) ?? 0) : 0);
+      }
+    } else {
+      for (const cat of categories) {
+        const prevEnd = runningPot.get(cat.id) ?? 0;
+        const targetCat = resolveSurplusTarget(cat, activeCatMap);
+
+        if (targetCat) {
+          if (prevEnd > 0.005) {
+            // Positive leftover sweeps into targetCat! This category starts fresh at 0 €.
+            ownCarryMap.set(cat.id, 0);
+            if (!sweptInSourcesMap.has(targetCat.id)) sweptInSourcesMap.set(targetCat.id, []);
+            sweptInSourcesMap.get(targetCat.id).push({
+              categoryId: cat.id,
+              name: cat.name,
+              amount: prevEnd,
+            });
+          } else {
+            // Zero or negative balance: keep deficit visible on this category (if rollover !== false)
+            ownCarryMap.set(cat.id, cat.rollover !== false ? prevEnd : 0);
+          }
+        } else {
+          ownCarryMap.set(cat.id, cat.rollover ? prevEnd : 0);
+        }
+      }
+    }
+
+    // 2. Aggregate transactions in month `mk`
     const spentMap = new Map();
     const catIncomeMap = new Map();
     const transferInMap = new Map();
@@ -133,36 +199,52 @@ export function computeMonthSnapshot(state, targetMonth) {
     const statsThisMonth = [];
 
     for (const cat of categories) {
-      const prevPot = runningPot.get(cat.id) ?? 0;
-      const carryIn = cat.rollover ? prevPot : 0;
+      const ownCarryIn = ownCarryMap.get(cat.id) ?? 0;
+      const sweptInSources = sweptInSourcesMap.get(cat.id) || [];
+      const sweptIn = roundCents(sweptInSources.reduce((s, x) => s + x.amount, 0));
+      const carryIn = roundCents(ownCarryIn + sweptIn);
+
       const budget = getEffectiveBudget(cat, mk);
-      const spent = spentMap.get(cat.id) || 0;
+      const actualSpent = spentMap.get(cat.id) || 0;
+      const hasActivity = txCountMap.has(cat.id);
+      const isCleanFutureStart = mk === timelineStart && compareMonthKeys(timelineStart, currentKey) > 0;
+      const isProjected = isFutureMonth && !isCleanFutureStart && !hasActivity && cat.group !== 'reserve' && budget > 0;
+      const spent = isProjected ? budget : actualSpent;
       const catIncome = catIncomeMap.get(cat.id) || 0;
       const transfersIn = transferInMap.get(cat.id) || 0;
       const transfersOut = transferOutMap.get(cat.id) || 0;
       const netTransfers = roundCents(transfersIn - transfersOut);
 
-      // Net outflow for this category in this month (refunds reduce net spending)
       const netSpent = roundCents(spent - catIncome);
-      // Monthly difference: positive = under budget (surplus), negative = over budget
       const monthDiff = roundCents(budget - netSpent);
-      // Cumulative category account balance (Kategoriekonto)
       const potBalance = roundCents(carryIn + monthDiff + netTransfers);
 
       runningPot.set(cat.id, potBalance);
+      if (cat.group === 'invest') {
+        cumulativeInvested = roundCents(cumulativeInvested + Math.max(0, netSpent));
+      }
 
       if (mk === targetMonth) {
+        const surplusTarget = resolveSurplusTarget(cat, activeCatMap);
+        const sweepPreviewAmount = surplusTarget && potBalance > 0.005 ? potBalance : 0;
         const spentPct = budget > 0 ? Math.max(0, (netSpent / budget) * 100) : (netSpent > 0 ? 100 : 0);
         const goalPct = cat.goalAmount && cat.goalAmount > 0
           ? Math.max(0, Math.min(100, (potBalance / cat.goalAmount) * 100))
           : null;
+        const isRecurring = Boolean(cat.isFixed);
 
         statsThisMonth.push({
           category: cat,
           monthKey: mk,
+          ownCarryIn,
+          sweptIn,
+          sweptInSources,
           carryIn,
+          surplusTarget,
+          sweepPreviewAmount,
           budget,
           spent,
+          actualSpent,
           catIncome,
           netSpent,
           transfersIn,
@@ -172,6 +254,10 @@ export function computeMonthSnapshot(state, targetMonth) {
           potBalance,
           spentPct,
           goalPct,
+          isProjected,
+          isRecurring,
+          bookingDay: isRecurring ? getBookingDay(cat) : null,
+          isBooked: isRecurring && actualSpent > 0,
           txCount: txCountMap.get(cat.id) || 0,
         });
       }
@@ -186,7 +272,9 @@ export function computeMonthSnapshot(state, targetMonth) {
     }
   }
 
-  // Monthly totals
+  const isFuture = compareMonthKeys(targetMonth, currentKey) > 0;
+  const isCurrent = targetMonth === currentKey;
+
   const salary = getEffectiveSalary(state, targetMonth);
   let generalExtraIncome = 0;
   let totalCategoryIncome = 0;
@@ -202,6 +290,11 @@ export function computeMonthSnapshot(state, targetMonth) {
     }
   }
 
+  const projectedSpent = roundCents(
+    finalCategoryStats.filter((s) => s.isProjected).reduce((sum, s) => sum + s.spent, 0)
+  );
+  totalSpent = roundCents(totalSpent + projectedSpent);
+
   const totalIncome = roundCents(salary + generalExtraIncome);
   const netOutflow = roundCents(totalSpent - totalCategoryIncome);
   const totalBudgeted = roundCents(finalCategoryStats.reduce((sum, s) => sum + s.budget, 0));
@@ -209,14 +302,9 @@ export function computeMonthSnapshot(state, targetMonth) {
   const totalMonthDiff = roundCents(totalBudgeted - netOutflow);
   const monthlyCashflowDiff = roundCents(totalIncome - netOutflow);
   const totalPotBalance = roundCents(finalCategoryStats.reduce((sum, s) => sum + s.potBalance, 0));
-  const positivePotTotal = roundCents(
-    finalCategoryStats.reduce((sum, s) => sum + Math.max(0, s.potBalance), 0)
-  );
-  const negativePotTotal = roundCents(
-    finalCategoryStats.reduce((sum, s) => sum + Math.min(0, s.potBalance), 0)
-  );
+  const positivePotTotal = roundCents(finalCategoryStats.reduce((sum, s) => sum + Math.max(0, s.potBalance), 0));
+  const negativePotTotal = roundCents(finalCategoryStats.reduce((sum, s) => sum + Math.min(0, s.potBalance), 0));
 
-  // Investment & savings rate (counts 'invest' group spending as wealth-building!)
   const investedThisMonth = roundCents(
     finalCategoryStats
       .filter((s) => s.category.group === 'invest')
@@ -225,39 +313,50 @@ export function computeMonthSnapshot(state, targetMonth) {
   const wealthAdded = roundCents(monthlyCashflowDiff + investedThisMonth);
   const savingsRate = totalIncome > 0 ? (wealthAdded / totalIncome) * 100 : 0;
 
-  // Unbooked recurring fixed categories in this month (1-Tap Fixkosten Assistent)
-  const unbookedFixed = finalCategoryStats.filter(
-    (s) => s.category.isFixed && s.budget > 0 && s.spent === 0
-  );
-  const unbookedFixedTotal = roundCents(unbookedFixed.reduce((sum, s) => sum + s.budget, 0));
+  const allowBooking = !isFuture || (targetMonth === timelineStart && compareMonthKeys(timelineStart, currentKey) > 0);
+  const unbookedRecurring = !allowBooking
+    ? []
+    : finalCategoryStats
+        .filter((s) => s.isRecurring && s.budget > 0 && s.actualSpent === 0)
+        .sort((a, b) => a.bookingDay - b.bookingDay);
+  const unbookedRecurringTotal = roundCents(unbookedRecurring.reduce((sum, s) => sum + s.budget, 0));
 
-  // Current month pace indicator (percentage of days elapsed in current month)
   let monthPace = null;
-  if (targetMonth === getCurrentMonthKey()) {
+  let dailyAllowance = null;
+  if (isCurrent) {
     const today = new Date();
     const totalDays = daysInMonth(targetMonth);
     monthPace = Math.min(100, Math.max(2, (today.getDate() / totalDays) * 100));
+
+    const flex = finalCategoryStats.filter((s) => s.category.group === 'daily' && !s.isRecurring && s.budget > 0);
+    if (flex.length > 0) {
+      const daysLeft = Math.max(1, totalDays - today.getDate() + 1);
+      const remaining = roundCents(flex.reduce((sum, s) => sum + Math.max(0, s.budget - s.netSpent), 0));
+      dailyAllowance = {
+        remaining,
+        daysLeft,
+        perDay: roundCents(remaining / daysLeft),
+        budget: roundCents(flex.reduce((sum, s) => sum + s.budget, 0)),
+      };
+    }
   }
 
-  // Group summaries
   const groupSummaries = CATEGORY_GROUPS.map((g) => {
     const items = finalCategoryStats.filter((s) => s.category.group === g.id);
-    const budget = roundCents(items.reduce((a, b) => a + b.budget, 0));
-    const netSpentVal = roundCents(items.reduce((a, b) => a + b.netSpent, 0));
-    const diff = roundCents(items.reduce((a, b) => a + b.monthDiff, 0));
-    const pot = roundCents(items.reduce((a, b) => a + b.potBalance, 0));
     return {
       ...g,
       items,
-      budget,
-      netSpent: netSpentVal,
-      diff,
-      pot,
+      budget: roundCents(items.reduce((a, b) => a + b.budget, 0)),
+      netSpent: roundCents(items.reduce((a, b) => a + b.netSpent, 0)),
+      diff: roundCents(items.reduce((a, b) => a + b.monthDiff, 0)),
+      pot: roundCents(items.reduce((a, b) => a + b.potBalance, 0)),
     };
   }).filter((g) => g.items.length > 0);
 
   return {
     monthKey: targetMonth,
+    isFuture,
+    isCurrent,
     salary,
     salaryOverridden: isSalaryOverridden(state, targetMonth),
     generalExtraIncome,
@@ -266,6 +365,7 @@ export function computeMonthSnapshot(state, targetMonth) {
     totalBudgeted,
     unallocatedSalary,
     totalSpent,
+    projectedSpent,
     netOutflow,
     totalMonthDiff,
     monthlyCashflowDiff,
@@ -273,11 +373,13 @@ export function computeMonthSnapshot(state, targetMonth) {
     positivePotTotal,
     negativePotTotal,
     investedThisMonth,
+    cumulativeInvested,
     wealthAdded,
     savingsRate,
     monthPace,
-    unbookedFixed,
-    unbookedFixedTotal,
+    dailyAllowance,
+    unbookedRecurring,
+    unbookedRecurringTotal,
     categories: finalCategoryStats,
     groups: groupSummaries,
     transactions: finalMonthTxs,
@@ -285,22 +387,22 @@ export function computeMonthSnapshot(state, targetMonth) {
 }
 
 /**
- * Computes snapshots for the last `count` months ending at `endMonthKey` (chronological order).
+ * Snapshots for the last `count` months ending at `endMonthKey` (chronological),
+ * never reaching back before the tracking start.
  */
 export function computeHistorySeries(state, endMonthKey, count = 6) {
+  const start = getTimelineStartMonth(state);
   const months = [];
   for (let i = count - 1; i >= 0; i--) {
-    months.push(shiftMonthKey(endMonthKey, -i));
+    const mk = shiftMonthKey(endMonthKey, -i);
+    if (compareMonthKeys(mk, start) >= 0) months.push(mk);
   }
+  if (months.length === 0) months.push(endMonthKey);
   return months.map((mk) => computeMonthSnapshot(state, mk));
 }
 
-/**
- * Computes a single category's 6-month trajectory for the Category Detail Sheet.
- */
 export function computeCategoryHistory(state, categoryId, endMonthKey, count = 6) {
-  const series = computeHistorySeries(state, endMonthKey, count);
-  return series.map((snap) => {
+  return computeHistorySeries(state, endMonthKey, count).map((snap) => {
     const stat = snap.categories.find((c) => c.category.id === categoryId);
     return {
       monthKey: snap.monthKey,
@@ -308,6 +410,20 @@ export function computeCategoryHistory(state, categoryId, endMonthKey, count = 6
       netSpent: stat ? stat.netSpent : 0,
       monthDiff: stat ? stat.monthDiff : 0,
       potBalance: stat ? stat.potBalance : 0,
+      isProjected: stat ? stat.isProjected : false,
     };
   });
+}
+
+/**
+ * Monthly recap ("Rückblick") for a finished month.
+ */
+export function computeMonthRecap(state, monthKey) {
+  const snapshot = computeMonthSnapshot(state, monthKey);
+  const withBudget = snapshot.categories.filter((s) => s.budget > 0);
+  const onPlan = withBudget.filter((s) => s.monthDiff >= -0.005).length;
+  const best = [...snapshot.categories]
+    .filter((s) => !s.isRecurring && s.monthDiff > 0)
+    .sort((a, b) => b.monthDiff - a.monthDiff)[0] || null;
+  return { snapshot, onPlan, total: withBudget.length, best };
 }

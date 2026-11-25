@@ -3,8 +3,10 @@
 // ==========================================================================
 
 import { icon } from '../icons.js';
-import { escapeHtml } from '../format.js';
+import { escapeHtml, formatMonthLong } from '../format.js';
 import { exportBackupFile, copyBackupToClipboard } from '../backup.js';
+import { getTimelineStartMonth } from '../finance.js';
+import { openStartMonthSheet } from './monthpicker.js';
 
 function formatBackupAge(iso) {
   if (!iso) return 'Noch keine Datensicherung erstellt';
@@ -98,6 +100,23 @@ export function openSettingsSheet(sheetManager, store, { onRequestImport, onToas
       </div>
     </div>
 
+    <!-- Zeitraum -->
+    <div class="settings-group">
+      <div class="settings-group-title">Zeitraum</div>
+      <div class="settings-card">
+        <button type="button" class="settings-row settings-row-btn" id="set-start-month">
+          <div class="settings-row-left">
+            <div class="settings-row-icon">${icon('calendar', 17)}</div>
+            <div>
+              <div class="toggle-title">Tracking-Beginn: ${escapeHtml(formatMonthLong(getTimelineStartMonth(store.state)))}</div>
+              <div class="toggle-desc">Monate davor werden ausgeblendet</div>
+            </div>
+          </div>
+          ${icon('chevronRight', 16)}
+        </button>
+      </div>
+    </div>
+
     <!-- Darstellung & Privatsphäre -->
     <div class="settings-group">
       <div class="settings-group-title">Darstellung &amp; Privatsphäre</div>
@@ -143,7 +162,7 @@ export function openSettingsSheet(sheetManager, store, { onRequestImport, onToas
             <div class="settings-row-icon" style="color:var(--warning);background:var(--warning-soft);">${icon('sparkles', 17)}</div>
             <div>
               <div class="toggle-title">3-Monats-Beispieldaten laden</div>
-              <div class="toggle-desc">Zeigt gefüllte Töpfe, Charts &amp; Fixkosten zum Ausprobieren</div>
+              <div class="toggle-desc">Zeigt gefüllte Töpfe, Charts &amp; Daueraufträge zum Ausprobieren</div>
             </div>
           </div>
           ${icon('chevronRight', 16)}
@@ -174,7 +193,7 @@ export function openSettingsSheet(sheetManager, store, { onRequestImport, onToas
     </div>
 
     <div style="text-align:center;font-size:0.7rem;color:var(--text-tertiary);padding-top:4px;">
-      cash-map PWA v1.0 · 100 % lokal auf deinem Gerät gespeichert
+      cash-map PWA v1.2 · 100 % lokal auf deinem Gerät gespeichert
     </div>
   `;
 
@@ -215,6 +234,10 @@ export function openSettingsSheet(sheetManager, store, { onRequestImport, onToas
 
       panel.querySelector('#set-import-paste').addEventListener('click', () => {
         sheetManager.openPasteImportSheet();
+      });
+
+      panel.querySelector('#set-start-month').addEventListener('click', () => {
+        openStartMonthSheet(sheetManager, store, { onToast });
       });
 
       panel.querySelectorAll('[data-set-theme]').forEach((btn) => {

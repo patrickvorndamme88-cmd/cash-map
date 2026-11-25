@@ -11,11 +11,45 @@ import {
   parseGermanAmount,
   escapeHtml,
   roundCents,
+  daysInMonth,
+  shiftMonthKey,
+  getCurrentMonthKey,
+  compareMonthKeys,
 } from '../format.js';
 import { CATEGORY_GROUPS } from '../defaults.js';
-import { computeCategoryHistory, getEffectiveBudget, getEffectiveSalary, isSalaryOverridden } from '../finance.js';
+import { computeCategoryHistory, getEffectiveBudget, getEffectiveSalary, isSalaryOverridden, getMonthBounds } from '../finance.js';
+import { lockScroll, unlockScroll } from '../ui.js';
 import { renderCategoryHistoryChart } from '../charts.js';
 import { parseAndValidateBackup } from '../backup.js';
+
+const DEFAULT_NOTE_HINTS = {
+  cat_ernaehrung: ['Wocheneinkauf', 'Supermarkt', 'Drogerie', 'Bäcker'],
+  cat_auto: ['Tanken', 'Waschanlage', 'Werkstatt', 'Parken'],
+  cat_sauna: ['Therme', 'Abendtarif', 'Tageskarte'],
+  cat_kleidung: ['Kleidung', 'Schuhe', 'Jacke'],
+  cat_ruecklage_fix: ['Rundfunkbeitrag', 'KFZ-Versicherung', 'Haftpflicht'],
+  cat_puffer: ['Geschenk', 'Apotheke', 'Ungeplant'],
+};
+
+function getQuickNoteChips(transactions, txType, categoryId) {
+  if (txType === 'transfer') return ['Ausgleich', 'Ansparen', 'Umschichtung'];
+  if (txType === 'income') return categoryId ? ['Erstattung', 'Retoure', 'Cashback'] : ['Bonus', 'Verkauf', 'Steuererstattung'];
+  const counts = new Map();
+  for (const t of transactions || []) {
+    if (t.type === 'expense' && t.categoryId === categoryId && t.note && !t.note.endsWith('(Dauerauftrag)') && !t.note.endsWith('(Fixkosten)')) {
+      const n = t.note.trim();
+      if (n.length >= 2 && n.length <= 26) counts.set(n, (counts.get(n) || 0) + 1);
+    }
+  }
+  const learned = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const fallbacks = DEFAULT_NOTE_HINTS[categoryId] || [];
+  const merged = [];
+  for (const item of [...learned, ...fallbacks]) {
+    if (!merged.some((x) => x.toLowerCase() === item.toLowerCase())) merged.push(item);
+    if (merged.length >= 4) break;
+  }
+  return merged;
+}
 
 export function createSheetManager(sheetRoot, store, { onToast }) {
   let cleanupFns = [];
@@ -25,6 +59,7 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       try { fn(); } catch {}
     });
     cleanupFns = [];
+    unlockScroll('sheet');
     sheetRoot.classList.remove('is-open');
     sheetRoot.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
@@ -53,10 +88,44 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       </div>
     `;
 
-    // Trigger transition next frame
+    // Lock page behind the sheet & trigger slide-in transition next frame
+    lockScroll('sheet');
     requestAnimationFrame(() => {
       sheetRoot.classList.add('is-open');
       sheetRoot.setAttribute('aria-hidden', 'false');
+    });
+
+    // Swipe-down-to-dismiss on handle & header (native iOS sheet feel)
+    const panelEl = sheetRoot.querySelector('.sheet-panel');
+    let dragStartY = null;
+    let dragDy = 0;
+    let dragStartT = 0;
+    const onDragStart = (e) => {
+      if (e.target.closest('button, input, select, textarea, a')) return;
+      dragStartY = e.touches[0].clientY;
+      dragDy = 0;
+      dragStartT = Date.now();
+      panelEl.classList.add('is-dragging');
+    };
+    const onDragMove = (e) => {
+      if (dragStartY === null) return;
+      dragDy = Math.max(0, e.touches[0].clientY - dragStartY);
+      panelEl.style.transform = `translateY(${dragDy}px)`;
+      e.preventDefault();
+    };
+    const onDragEnd = () => {
+      if (dragStartY === null) return;
+      const velocity = dragDy / Math.max(1, Date.now() - dragStartT);
+      dragStartY = null;
+      panelEl.classList.remove('is-dragging');
+      panelEl.style.transform = '';
+      if (dragDy > 110 || (velocity > 0.55 && dragDy > 36)) close();
+    };
+    sheetRoot.querySelectorAll('.sheet-handle-bar, .sheet-header').forEach((el) => {
+      el.addEventListener('touchstart', onDragStart, { passive: true });
+      el.addEventListener('touchmove', onDragMove, { passive: false });
+      el.addEventListener('touchend', onDragEnd);
+      el.addEventListener('touchcancel', onDragEnd);
     });
 
     sheetRoot.querySelectorAll('[data-sheet-close]').forEach((el) => {
@@ -110,6 +179,9 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
     let txNote = editTx ? (editTx.note || '') : '';
 
     const isEdit = Boolean(editTx);
+    const bounds = getMonthBounds(store.state);
+    const dateMin = `${bounds.min}-01`;
+    const dateMax = `${bounds.max}-${String(daysInMonth(bounds.max)).padStart(2, '0')}`;
 
     function renderInner(panel) {
       const amountVal = evalExpr(expr);
@@ -217,13 +289,20 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
         <div class="field-row-2">
           <div class="field">
             <label class="field-label" for="tx-date-input">Datum</label>
-            <input id="tx-date-input" type="date" class="input" style="padding:9px 11px;font-size:var(--text-sm);" value="${escapeHtml(txDate)}" />
+            <input id="tx-date-input" type="date" class="input" min="${dateMin}" max="${dateMax}" style="padding:10px 11px;" value="${escapeHtml(txDate)}" />
           </div>
           <div class="field">
             <label class="field-label" for="tx-note-input">Notiz</label>
-            <input id="tx-note-input" type="text" class="input" style="padding:9px 11px;font-size:var(--text-sm);" placeholder="${txType === 'transfer' ? 'z. B. Werkstatt ausgleichen' : 'z. B. REWE, Tanken…'}" value="${escapeHtml(txNote)}" />
+            <input id="tx-note-input" type="text" class="input" style="padding:10px 11px;" placeholder="${txType === 'transfer' ? 'z. B. Werkstatt ausgleichen' : 'z. B. REWE, Tanken…'}" value="${escapeHtml(txNote)}" />
           </div>
         </div>
+        ${(() => {
+          const chips = getQuickNoteChips(store.state.transactions, txType, selectedCatId);
+          if (chips.length === 0) return '';
+          return `<div class="quick-note-row" aria-label="Schnell-Notizen">${chips
+            .map((c) => `<button type="button" class="quick-note-chip ${txNote === c ? 'is-active' : ''}" data-note-chip="${escapeHtml(c)}">${escapeHtml(c)}</button>`)
+            .join('')}</div>`;
+        })()}
 
         <!-- Custom iPhone Numpad -->
         <div class="numpad-grid" aria-label="Ziffernblock">
@@ -284,6 +363,14 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
         txNote = e.target.value;
       });
 
+      body.querySelectorAll('[data-note-chip]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const val = btn.getAttribute('data-note-chip');
+          txNote = txNote === val ? '' : val;
+          renderInner(panel);
+        });
+      });
+
       const handleKeyInput = (k) => {
         if (k === 'submit') {
           submit();
@@ -328,6 +415,14 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       }
       if (txType === 'transfer' && (!fromCatId || !toCatId || fromCatId === toCatId)) {
         onToast('Bitte wähle zwei verschiedene Töpfe zum Umbuchen.', 'warn');
+        return;
+      }
+      if (txDate && txDate < dateMin) {
+        onToast(`Das Datum liegt vor deinem Tracking-Beginn (${formatMonthLong(bounds.min)}).`, 'warn');
+        return;
+      }
+      if (txDate && txDate > dateMax) {
+        onToast('Das Datum liegt zu weit in der Zukunft.', 'warn');
         return;
       }
 
@@ -432,6 +527,64 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
     );
     const canRescueFromPuffer = stat.potBalance < -0.01 && pufferCat && pufferCat.potBalance > 0;
 
+    // Dauerauftrag status (booked / open → 1-tap book)
+    const isFutureMonth = compareMonthKeys(snapshot.monthKey, getCurrentMonthKey()) > 0;
+    let recurringBlock = '';
+    if (stat.isRecurring) {
+      if (stat.isBooked) {
+        recurringBlock = `
+          <div class="action-banner is-pos">
+            <div class="action-banner-left">
+              <div class="action-banner-icon" style="background:var(--positive-soft);color:var(--positive);">${icon('check', 18)}</div>
+              <div>
+                <div class="action-banner-title">Dauerauftrag gebucht</div>
+                <div class="action-banner-sub">${escapeHtml(formatMoney(stat.actualSpent, { privacy }))} im ${escapeHtml(formatMonthLong(snapshot.monthKey))} · Buchungstag ${stat.bookingDay}.</div>
+              </div>
+            </div>
+          </div>`;
+      } else if (!isFutureMonth) {
+        recurringBlock = `
+          <div class="action-banner">
+            <div class="action-banner-left">
+              <div class="action-banner-icon">${icon('repeat', 18)}</div>
+              <div>
+                <div class="action-banner-title">Dauerauftrag offen</div>
+                <div class="action-banner-sub">Fällig am ${stat.bookingDay}. · ${escapeHtml(formatMoney(stat.budget, { privacy }))}</div>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-book-single">Jetzt buchen</button>
+          </div>`;
+      }
+    }
+
+    // Savings goal forecast
+    let goalBlock = '';
+    if (cat.goalAmount && cat.goalAmount > 0) {
+      const goal = cat.goalAmount;
+      const pct = Math.max(0, Math.min(100, (stat.potBalance / goal) * 100));
+      const avgDiff = roundCents(history.reduce((s, h) => s + h.monthDiff + 0, 0) / Math.max(1, history.length));
+      let forecast;
+      if (stat.potBalance >= goal) {
+        forecast = 'Sparziel erreicht – stark!';
+      } else if (avgDiff > 0) {
+        const monthsNeeded = Math.ceil((goal - stat.potBalance) / avgDiff);
+        forecast = monthsNeeded <= 120
+          ? `Bei Ø ${formatMoney(avgDiff, { privacy, signed: true, compact: true })} pro Monat erreichst du es voraussichtlich im ${formatMonthLong(shiftMonthKey(snapshot.monthKey, monthsNeeded))}.`
+          : 'Bei deinem aktuellen Tempo dauert es noch über 10 Jahre.';
+      } else {
+        forecast = 'Aktuell wächst dieser Topf nicht – erhöhe das Budget oder gib etwas weniger aus.';
+      }
+      goalBlock = `
+        <div class="breakdown-box">
+          <div class="breakdown-row">
+            <span style="display:flex;align-items:center;gap:6px;font-weight:650;color:var(--text-primary);">${icon('target', 15)} Sparziel ${escapeHtml(formatMoney(goal, { privacy, compact: true }))}</span>
+            <span class="money" style="font-weight:750;color:var(--text-primary);">${Math.round(pct)} %</span>
+          </div>
+          <div class="goal-track"><div class="goal-fill" style="width:${pct.toFixed(1)}%;background:${cat.color};"></div></div>
+          <div class="field-hint">${escapeHtml(forecast)}</div>
+        </div>`;
+    }
+
     const txRows = catTxs.length > 0
       ? `<div class="tx-list">${catTxs
           .map((tx) => {
@@ -453,18 +606,89 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           .join('')}</div>`
       : `<div style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center;padding:12px;">Noch keine Buchungen im ${escapeHtml(formatMonthLong(snapshot.monthKey))}.</div>`;
 
+    const otherActiveCats = snapshot.categories
+      .map((s) => s.category)
+      .filter((c) => c.id !== cat.id);
+
+    const currentRuleVal = stat.surplusTarget
+      ? stat.surplusTarget.id
+      : cat.rollover
+        ? '__self__'
+        : '__none__';
+
+    const surplusRuleOptions = [
+      `<option value="__self__" ${currentRuleVal === '__self__' ? 'selected' : ''}>Im eigenen Topf ansparen</option>`,
+      ...otherActiveCats.map(
+        (c) => `<option value="${c.id}" ${currentRuleVal === c.id ? 'selected' : ''}>Überschuss → ${escapeHtml(c.name)}</option>`
+      ),
+      `<option value="__none__" ${currentRuleVal === '__none__' ? 'selected' : ''}>Verfallen lassen (ohne Übertrag)</option>`,
+    ].join('');
+
+    const surplusQuickRow = !stat.isRecurring
+      ? `
+        <div class="field" style="gap:5px;">
+          <label class="field-label" for="detail-surplus-select">
+            <span>${icon('cornerDownRight', 12, 'inline-icon')} Was passiert am Monatsende mit Überschuss?</span>
+          </label>
+          <select id="detail-surplus-select" class="select" style="padding:9px 12px;">${surplusRuleOptions}</select>
+        </div>
+      `
+      : '';
+
+    const carryRowsHtml = (() => {
+      if (stat.sweptIn > 0.005) {
+        const srcRows = stat.sweptInSources
+          .map(
+            (src) => `
+              <div class="breakdown-row">
+                <span>+ Überschuss Vormonat (${escapeHtml(src.name)})</span>
+                <span class="money text-pos">+${escapeHtml(formatMoney(src.amount, { privacy }))}</span>
+              </div>`
+          )
+          .join('');
+        return `
+          <div class="breakdown-row">
+            <span>Übertrag eigener Topf</span>
+            <span class="money">${escapeHtml(formatMoney(stat.ownCarryIn, { privacy, signed: true }))}</span>
+          </div>
+          ${srcRows}
+        `;
+      }
+      if (stat.surplusTarget) {
+        return Math.abs(stat.carryIn) >= 0.01
+          ? `<div class="breakdown-row"><span>Vormonat-Saldo</span><span class="money">${escapeHtml(formatMoney(stat.carryIn, { privacy, signed: true }))}</span></div>`
+          : '';
+      }
+      if (cat.rollover) {
+        return `
+          <div class="breakdown-row">
+            <span>Übertrag aus Vormonat</span>
+            <span class="money">${escapeHtml(formatMoney(stat.carryIn, { privacy, signed: true }))}</span>
+          </div>
+        `;
+      }
+      return '';
+    })();
+
     const bodyHtml = `
       <div style="display:flex;align-items:center;gap:12px;">
         <div class="cat-icon" style="--cat-color:${cat.color};width:48px;height:48px;border-radius:15px;">${icon(cat.icon, 24)}</div>
         <div style="min-width:0;flex:1;">
           <div style="font-size:var(--text-lg);font-weight:750;letter-spacing:-0.02em;">${escapeHtml(cat.name)}</div>
-          <div style="font-size:var(--text-xs);color:var(--text-secondary);">${escapeHtml(cat.note || (cat.rollover ? 'Wachsendes Kategoriekonto aktiv' : 'Monatliches Budget ohne Übertrag'))}</div>
+          <div style="font-size:var(--text-xs);color:var(--text-secondary);">${escapeHtml(
+            cat.note ||
+              (stat.surplusTarget
+                ? `Überschuss wandert am Monatsende in ${stat.surplusTarget.name}`
+                : cat.rollover
+                  ? 'Wachsendes Kategoriekonto aktiv'
+                  : 'Monatliches Budget ohne Übertrag')
+          )}</div>
         </div>
       </div>
 
       <div class="kpi-pair">
         <div class="kpi-tile">
-          <div class="kpi-tile-label">${cat.rollover ? 'Kategoriekonto gesamt' : 'Rest im Monat'}</div>
+          <div class="kpi-tile-label">${stat.surplusTarget ? 'Rest im Monat' : cat.rollover ? 'Kategoriekonto gesamt' : 'Rest im Monat'}</div>
           <div class="kpi-tile-val money ${stat.potBalance >= 0 ? 'text-pos' : 'text-neg'}">${escapeHtml(formatMoney(stat.potBalance, { privacy, signed: true }))}</div>
         </div>
         <div class="kpi-tile">
@@ -472,6 +696,10 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           <div class="kpi-tile-val money ${stat.monthDiff >= 0 ? 'text-pos' : 'text-neg'}">${escapeHtml(formatMoney(stat.monthDiff, { privacy, signed: true }))}</div>
         </div>
       </div>
+
+      ${recurringBlock}
+      ${surplusQuickRow}
+      ${goalBlock}
 
       ${canRescueFromPuffer ? `
         <button class="btn btn-primary btn-block" id="btn-rescue-puffer">
@@ -484,18 +712,13 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
         <div style="font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-tertiary);margin-bottom:2px;">
           Konto-Aufschlüsselung (${escapeHtml(formatMonthLong(snapshot.monthKey))})
         </div>
-        ${cat.rollover ? `
-          <div class="breakdown-row">
-            <span>Übertrag aus Vormonat</span>
-            <span class="money">${escapeHtml(formatMoney(stat.carryIn, { privacy, signed: true }))}</span>
-          </div>
-        ` : ''}
+        ${carryRowsHtml}
         <div class="breakdown-row">
           <span>+ Monatsbudget</span>
           <span class="money text-pos">${escapeHtml(formatMoney(stat.budget, { privacy, signed: true }))}</span>
         </div>
         <div class="breakdown-row">
-          <span>− Ausgaben</span>
+          <span>${stat.isProjected ? '− Eingeplant (Prognose)' : '− Ausgaben'}</span>
           <span class="money">${stat.spent > 0 ? '−' : ''}${escapeHtml(formatMoney(stat.spent, { privacy }))}</span>
         </div>
         ${stat.catIncome > 0 ? `
@@ -511,9 +734,14 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           </div>
         ` : ''}
         <div class="breakdown-row is-total">
-          <span>= Kontostand Ende Monat</span>
+          <span>= ${stat.surplusTarget ? 'Rest Ende Monat' : 'Kontostand Ende Monat'}</span>
           <span class="money ${stat.potBalance >= 0 ? 'text-pos' : 'text-neg'}">${escapeHtml(formatMoney(stat.potBalance, { privacy, signed: true }))}</span>
         </div>
+        ${stat.surplusTarget && stat.potBalance > 0.005 ? `
+          <div class="field-hint" style="padding-top:4px;border-top:1px dashed var(--border-subtle);color:var(--positive);">
+            ${icon('cornerDownRight', 12, 'inline-icon')} <strong>${escapeHtml(formatMoney(stat.potBalance, { privacy }))}</strong> wandern am Monatsende automatisch in <strong>„${escapeHtml(stat.surplusTarget.name)}“</strong>.
+          </div>
+        ` : ''}
       </div>
 
       <!-- Quick Action Buttons -->
@@ -543,6 +771,25 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       headerRight: `<button class="btn btn-secondary btn-sm" id="btn-detail-edit-cat">${icon('edit', 14)} Bearbeiten</button>`,
       bodyHtml,
       onMount(panel) {
+        panel.querySelector('#detail-surplus-select')?.addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (v === '__self__') {
+            store.setCategorySurplusRule(cat.id, { rollover: true, surplusTargetId: null });
+            onToast(`${cat.name}: spart jetzt im eigenen Topf.`, 'info', { undo: true });
+          } else if (v === '__none__') {
+            store.setCategorySurplusRule(cat.id, { rollover: false, surplusTargetId: null });
+            onToast(`${cat.name}: ohne Übertrag.`, 'info', { undo: true });
+          } else {
+            const tCat = otherActiveCats.find((c) => c.id === v);
+            store.setCategorySurplusRule(cat.id, { rollover: true, surplusTargetId: v });
+            onToast(`${cat.name}: Überschuss wandert in „${tCat?.name || 'Ziel-Topf'}“.`, 'info', { undo: true });
+          }
+          // Refresh detail sheet with updated snapshot!
+          import('../finance.js').then(({ computeMonthSnapshot }) => {
+            const freshSnap = computeMonthSnapshot(store.state, snapshot.monthKey);
+            openCategoryDetailSheet({ snapshot: freshSnap, categoryId: cat.id });
+          });
+        });
         panel.querySelector('#btn-detail-edit-cat')?.addEventListener('click', () => {
           openCategoryEditSheet({ category: cat, monthKey: snapshot.monthKey });
         });
@@ -550,7 +797,16 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           openTransactionSheet({ snapshot, defaultType: 'expense', defaultCategoryId: cat.id });
         });
         panel.querySelector('#btn-detail-transfer')?.addEventListener('click', () => {
-          openTransactionSheet({ snapshot, defaultType: 'transfer', defaultToId: cat.id });
+          if (stat.potBalance > 0.005) {
+            openTransactionSheet({ snapshot, defaultType: 'transfer', defaultFromId: cat.id, defaultToId: stat.surplusTarget?.id || null });
+          } else {
+            openTransactionSheet({ snapshot, defaultType: 'transfer', defaultToId: cat.id });
+          }
+        });
+        panel.querySelector('#btn-book-single')?.addEventListener('click', () => {
+          store.bookRecurring([stat], snapshot.monthKey);
+          close();
+          onToast(`${cat.name} gebucht (${formatMoney(stat.budget)}).`, 'info', { undo: true });
         });
         panel.querySelector('#btn-rescue-puffer')?.addEventListener('click', () => {
           const amt = roundCents(Math.abs(stat.potBalance));
@@ -587,7 +843,24 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
     let initialBalance = category ? (category.initialBalance || 0) : 0;
     let goalAmount = category && category.goalAmount ? category.goalAmount : '';
     let isFixed = category ? Boolean(category.isFixed) : false;
+    const bookingDay = category?.bookingDay || 1;
+    const groupHint = (gid) => (CATEGORY_GROUPS.find((g) => g.id === gid) || CATEGORY_GROUPS[1]).hint;
+    const dayOptions = Array.from({ length: 28 }, (_, i) => i + 1)
+      .map((d) => `<option value="${d}" ${d === bookingDay ? 'selected' : ''}>am ${d}. des Monats</option>`)
+      .join('');
     let rollover = category ? category.rollover !== false : true;
+    let surplusTargetId = category?.surplusTargetId || null;
+    let surplusMode = surplusTargetId ? 'forward' : rollover ? 'self' : 'none';
+    const targetCandidates = store.state.categories
+      .filter((c) => !c.archived && c.id !== category?.id)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const defaultTargetId = surplusTargetId
+      || targetCandidates.find((c) => c.id === 'cat_puffer')?.id
+      || targetCandidates[0]?.id
+      || '';
+    const targetCatOpts = targetCandidates
+      .map((c) => `<option value="${c.id}" ${c.id === defaultTargetId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+      .join('');
     let selectedColor = category ? category.color : CATEGORY_COLORS[0];
     let selectedIcon = category ? category.icon : 'wallet';
     let note = category ? (category.note || '') : '';
@@ -625,6 +898,7 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
             <select id="ce-group" class="select">${groupOpts}</select>
           </div>
         </div>
+        <div class="field-hint" id="ce-group-hint">${escapeHtml(groupHint(group))}</div>
 
         ${isEdit ? `
           <div class="field">
@@ -653,26 +927,41 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           </div>
         </div>
 
-        <div class="toggle-row">
-          <div class="toggle-text">
-            <div class="toggle-title">Kategoriekonto (Rollover)</div>
-            <div class="toggle-desc">Übrig gebliebenes Geld sammelt sich im Topf an</div>
+        <div class="field">
+          <label class="field-label">Was passiert am Monatsende mit Überschuss?</label>
+          <div class="segmented">
+            <button type="button" class="segmented-btn ${surplusMode === 'self' ? 'is-active' : ''}" data-surplus-mode="self">Im Topf sparen</button>
+            <button type="button" class="segmented-btn ${surplusMode === 'forward' ? 'is-active' : ''}" data-surplus-mode="forward">Weiterleiten</button>
+            <button type="button" class="segmented-btn ${surplusMode === 'none' ? 'is-active' : ''}" data-surplus-mode="none">Verfällt</button>
           </div>
-          <label class="ios-switch">
-            <input type="checkbox" id="ce-rollover" ${rollover ? 'checked' : ''} />
-            <span class="ios-switch-track"></span>
-          </label>
+          <div class="field-hint" id="ce-surplus-hint">${
+            surplusMode === 'forward'
+              ? 'Neuer Monat startet frisch beim Budget – Ungenutztes fließt automatisch in deinen Ziel-Topf.'
+              : surplusMode === 'self'
+                ? 'Ideal für jährliche Kosten (z. B. Versicherungen) & Rücklagen – Guthaben bleibt in dieser Kategorie.'
+                : 'Startet jeden Monat wieder bei 0 € ohne Übertrag.'
+          }</div>
+        </div>
+
+        <div class="field" id="ce-target-field" style="${surplusMode === 'forward' ? '' : 'display:none;'}">
+          <label class="field-label" for="ce-surplus-target">Ziel-Topf für Überschüsse</label>
+          <select id="ce-surplus-target" class="select">${targetCatOpts}</select>
         </div>
 
         <div class="toggle-row">
           <div class="toggle-text">
-            <div class="toggle-title">Monatliche Fixkosten</div>
-            <div class="toggle-desc">Erscheint im 1-Tap Fixkosten-Assistenten am Monatsstart</div>
+            <div class="toggle-title">Dauerauftrag</div>
+            <div class="toggle-desc">Fester Betrag jeden Monat (z. B. Miete, Abo, Sparplan) – mit einem Tipp gebucht</div>
           </div>
           <label class="ios-switch">
             <input type="checkbox" id="ce-fixed" ${isFixed ? 'checked' : ''} />
             <span class="ios-switch-track"></span>
           </label>
+        </div>
+
+        <div class="field" id="ce-day-field" style="${isFixed ? '' : 'display:none;'}">
+          <label class="field-label" for="ce-day">Buchungstag</label>
+          <select id="ce-day" class="select">${dayOptions}</select>
         </div>
 
         <div class="field">
@@ -706,6 +995,31 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       title: isEdit ? 'Kategorie bearbeiten' : 'Neue Kategorie',
       bodyHtml,
       onMount(panel) {
+        panel.querySelectorAll('[data-surplus-mode]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            surplusMode = btn.getAttribute('data-surplus-mode');
+            panel.querySelectorAll('[data-surplus-mode]').forEach((b) => b.classList.toggle('is-active', b === btn));
+            const tf = panel.querySelector('#ce-target-field');
+            if (tf) tf.style.display = surplusMode === 'forward' ? '' : 'none';
+            const sh = panel.querySelector('#ce-surplus-hint');
+            if (sh) {
+              sh.textContent = surplusMode === 'forward'
+                ? 'Neuer Monat startet frisch beim Budget – Ungenutztes fließt automatisch in deinen Ziel-Topf.'
+                : surplusMode === 'self'
+                  ? 'Ideal für jährliche Kosten (z. B. Versicherungen) & Rücklagen – Guthaben bleibt in dieser Kategorie.'
+                  : 'Startet jeden Monat wieder bei 0 € ohne Übertrag.';
+            }
+          });
+        });
+        panel.querySelector('#ce-fixed')?.addEventListener('change', (e) => {
+          const dayField = panel.querySelector('#ce-day-field');
+          if (dayField) dayField.style.display = e.target.checked ? '' : 'none';
+        });
+        panel.querySelector('#ce-group')?.addEventListener('change', (e) => {
+          const hint = panel.querySelector('#ce-group-hint');
+          if (hint) hint.textContent = groupHint(e.target.value);
+        });
+
         panel.querySelectorAll('[data-budget-scope]').forEach((btn) => {
           btn.addEventListener('click', () => {
             budgetScope = btn.getAttribute('data-budget-scope');
@@ -754,6 +1068,7 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           const newInit = parseGermanAmount(panel.querySelector('#ce-initial').value);
           const rawGoal = panel.querySelector('#ce-goal').value.trim();
           const newGoal = rawGoal ? parseGermanAmount(rawGoal) : null;
+          const chosenTarget = surplusMode === 'forward' ? (panel.querySelector('#ce-surplus-target')?.value || null) : null;
 
           store.saveCategory(
             {
@@ -764,7 +1079,9 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
               initialBalance: Number.isFinite(newInit) ? newInit : 0,
               goalAmount: Number.isFinite(newGoal) && newGoal > 0 ? newGoal : null,
               isFixed: panel.querySelector('#ce-fixed').checked,
-              rollover: panel.querySelector('#ce-rollover').checked,
+              bookingDay: Number(panel.querySelector('#ce-day')?.value || 1),
+              rollover: surplusMode !== 'none',
+              surplusTargetId: chosenTarget,
               note: panel.querySelector('#ce-note').value,
               color: selectedColor,
               icon: selectedIcon,
@@ -922,7 +1239,7 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
     const bodyHtml = `
       <div class="field">
         <label class="field-label" for="paste-json-area">JSON-Datensicherung hier einfügen</label>
-        <textarea id="paste-json-area" class="textarea" rows="8" placeholder='{"app": "cash-map", ...}' style="font-family:var(--font-mono);font-size:12px;"></textarea>
+        <textarea id="paste-json-area" class="textarea" rows="8" placeholder='{"app": "cash-map", ...}' style="font-family:var(--font-mono);font-size:16px;"></textarea>
       </div>
       <button type="button" class="btn btn-primary btn-block" id="btn-parse-pasted">${icon('check', 16)} JSON prüfen &amp; Vorschau anzeigen</button>
     `;

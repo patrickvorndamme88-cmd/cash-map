@@ -39,6 +39,11 @@ const ICONS = {
   arrowDownLeft: `<path d="M17 7 7 17"/><path d="M17 17H7V7"/>`,
   piggy: `<path d="M19 11c0-3.3-3.1-6-7-6-2.5 0-4.7 1.1-6 2.8L4 7.5 3 11l1.5 1.5c.3 1.3 1 2.4 2 3.2V19h2.5v-1.6c.9.3 1.9.4 3 .4s2.1-.1 3-.4V19H17v-3.2c1.2-1 2-2.7 2-4.8Z"/><path d="M19 10h2v3h-2"/><circle cx="8.5" cy="10" r="0.8" fill="currentColor"/>`,
 
+  repeat: `<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>`,
+  cornerDownRight: `<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>`,
+  clock: `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+  target: `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>`,
+
   // Category Icons
   house: `<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/><path d="M9 21v-6h6v6"/>`,
   car: `<path d="M5 17H3.5A1.5 1.5 0 0 1 2 15.5V12l2.6-5.2A2 2 0 0 1 6.4 5.5h11.2a2 2 0 0 1 1.8 1.3L22 12v3.5a1.5 1.5 0 0 1-1.5 1.5H19"/><circle cx="7.5" cy="17" r="2.2"/><circle cx="16.5" cy="17" r="2.2"/><path d="M9.7 17h4.6"/><path d="M3.5 11.5h17"/>`,
