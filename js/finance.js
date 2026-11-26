@@ -274,6 +274,7 @@ export function computeMonthSnapshot(state, targetMonth) {
 
   const isFuture = compareMonthKeys(targetMonth, currentKey) > 0;
   const isCurrent = targetMonth === currentKey;
+  const isCleanFutureStart = isFuture && targetMonth === timelineStart;
 
   const salary = getEffectiveSalary(state, targetMonth);
   let generalExtraIncome = 0;
@@ -331,12 +332,14 @@ export function computeMonthSnapshot(state, targetMonth) {
     const flex = finalCategoryStats.filter((s) => s.category.group === 'daily' && !s.isRecurring && s.budget > 0);
     if (flex.length > 0) {
       const daysLeft = Math.max(1, totalDays - today.getDate() + 1);
-      const remaining = roundCents(flex.reduce((sum, s) => sum + Math.max(0, s.budget - s.netSpent), 0));
+      const flexBudget = roundCents(flex.reduce((sum, s) => sum + s.budget, 0));
+      const flexSpent = roundCents(flex.reduce((sum, s) => sum + s.netSpent, 0));
+      const remaining = Math.max(0, roundCents(flexBudget - flexSpent));
       dailyAllowance = {
         remaining,
         daysLeft,
         perDay: roundCents(remaining / daysLeft),
-        budget: roundCents(flex.reduce((sum, s) => sum + s.budget, 0)),
+        budget: flexBudget,
       };
     }
   }
@@ -357,6 +360,7 @@ export function computeMonthSnapshot(state, targetMonth) {
     monthKey: targetMonth,
     isFuture,
     isCurrent,
+    isCleanFutureStart,
     salary,
     salaryOverridden: isSalaryOverridden(state, targetMonth),
     generalExtraIncome,
@@ -409,6 +413,7 @@ export function computeCategoryHistory(state, categoryId, endMonthKey, count = 6
       budget: stat ? stat.budget : 0,
       netSpent: stat ? stat.netSpent : 0,
       monthDiff: stat ? stat.monthDiff : 0,
+      sweptIn: stat ? stat.sweptIn : 0,
       potBalance: stat ? stat.potBalance : 0,
       isProjected: stat ? stat.isProjected : false,
     };
@@ -422,8 +427,12 @@ export function computeMonthRecap(state, monthKey) {
   const snapshot = computeMonthSnapshot(state, monthKey);
   const withBudget = snapshot.categories.filter((s) => s.budget > 0);
   const onPlan = withBudget.filter((s) => s.monthDiff >= -0.005).length;
-  const best = [...snapshot.categories]
+  const activeSaved = [...snapshot.categories]
+    .filter((s) => !s.isRecurring && s.category.group !== 'reserve' && s.monthDiff > 0)
+    .sort((a, b) => b.monthDiff - a.monthDiff);
+  const reserveSaved = [...snapshot.categories]
     .filter((s) => !s.isRecurring && s.monthDiff > 0)
-    .sort((a, b) => b.monthDiff - a.monthDiff)[0] || null;
+    .sort((a, b) => b.monthDiff - a.monthDiff);
+  const best = activeSaved[0] || reserveSaved[0] || null;
   return { snapshot, onPlan, total: withBudget.length, best };
 }

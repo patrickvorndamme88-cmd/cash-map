@@ -17,14 +17,23 @@ import { FUTURE_PLANNING_MONTHS } from '../finance.js';
 import { lockScroll, unlockScroll } from '../ui.js';
 
 export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
+  let isActive = false;
   let step = 1;
   let salary = 3000;
   let startMonth = getCurrentMonthKey();
-  const budgets = {};
-  const surplusTargets = {};
-  for (const cat of store.state.categories) {
-    budgets[cat.id] = cat.budgetHistory?.[0]?.amount ?? 0;
-    surplusTargets[cat.id] = cat.surplusTargetId || null;
+  let budgets = {};
+  let surplusTargets = {};
+
+  function resetDraftFromStore() {
+    step = 1;
+    salary = store.state.salaryHistory?.[0]?.amount ?? 3000;
+    startMonth = store.state.settings?.startMonth || getCurrentMonthKey();
+    budgets = {};
+    surplusTargets = {};
+    for (const cat of store.state.categories) {
+      budgets[cat.id] = cat.budgetHistory?.[0]?.amount ?? 0;
+      surplusTargets[cat.id] = cat.surplusTargetId || null;
+    }
   }
 
   const sumBudgets = () => roundCents(Object.values(budgets).reduce((a, b) => a + (Number(b) || 0), 0));
@@ -38,11 +47,18 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
 
   function render() {
     if (store.state.settings.onboardingCompleted) {
+      isActive = false;
       rootEl.classList.remove('is-open');
       rootEl.setAttribute('aria-hidden', 'true');
       rootEl.innerHTML = '';
       unlockScroll('onboarding');
       return;
+    }
+
+    // Freshly opened (first launch OR restarted from Settings): always start cleanly on Step 1
+    if (!isActive) {
+      isActive = true;
+      resetDraftFromStore();
     }
 
     lockScroll('onboarding');
@@ -70,8 +86,8 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
             <div class="feature-pill-item">
               <div class="action-banner-icon">${icon('piggy', 19)}</div>
               <div>
-                <div style="font-weight:700;font-size:var(--text-sm);">Wachsende Kategoriekonten</div>
-                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px;">Gibst du bei Auto, Sauna oder Kleidung weniger aus, füllt sich der Topf Monat für Monat weiter.</div>
+                <div style="font-weight:700;font-size:var(--text-sm);">Wachsende Töpfe &amp; smarte Überschüsse</div>
+                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px;">Rücklagen wie Versicherungen oder Auto sparen im eigenen Topf an – bei Kategorien wie Sauna wandert Ungenutztes automatisch in deinen Puffer.</div>
               </div>
             </div>
             <div class="feature-pill-item">
@@ -135,7 +151,9 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
       `;
     } else if (step === 3) {
       const st = statusInfo();
-      const catsSorted = [...store.state.categories].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const catsSorted = [...store.state.categories]
+        .filter((c) => !c.archived)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
       const groupsHtml = CATEGORY_GROUPS.map((g) => {
         const items = catsSorted.filter((c) => c.group === g.id);
@@ -146,10 +164,12 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
           const ruleHtml = cat.isFixed
             ? `<div class="plan-meta truncate">${icon('repeat', 11, 'inline-icon')} Dauerauftrag am ${cat.bookingDay || 1}.</div>`
             : canToggleRule
-              ? `<button type="button" class="ob-rule-pill ${isForward ? 'is-forward' : ''}" data-ob-toggle-rule="${cat.id}" title="Antippen zum Umschalten">${
-                  isForward ? `${icon('cornerDownRight', 11, 'inline-icon')} Überschuss → Puffer` : 'Wachsender Topf'
-                }</button>`
-              : `<div class="plan-meta truncate">Wachsender Topf</div>`;
+              ? `<button type="button" class="ob-rule-pill ${isForward ? 'is-forward' : ''}" data-ob-toggle-rule="${cat.id}" aria-label="Überschuss-Verhalten für ${escapeHtml(cat.name)} wechseln">${
+                  isForward
+                    ? `${icon('cornerDownRight', 11, 'inline-icon')} Überschuss → Puffer`
+                    : `${icon('piggy', 11, 'inline-icon')} Wachsender Topf`
+                }<span class="ob-rule-swap" aria-hidden="true">⇄</span></button>`
+              : `<div class="plan-meta truncate">${icon('piggy', 11, 'inline-icon')} Wachsender Topf</div>`;
 
           return `
             <div class="plan-cat-row" style="padding:9px 11px;">
@@ -177,8 +197,10 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div>
             <div class="ob-step-label">Schritt 2 von 2</div>
-            <h2 class="onboarding-h2">Dein Gehalt auf ${store.state.categories.length} Töpfe verteilen</h2>
-            <p style="margin:4px 0 0;font-size:var(--text-xs);color:var(--text-tertiary);">Tipp: Tippe unter einer Kategorie auf <strong>Wachsender Topf</strong>, falls Ungenutztes lieber in deinen <strong>Puffer</strong> wandern soll (wie bei Sauna voreingestellt).</p>
+            <h2 class="onboarding-h2">Dein Gehalt auf deine Kategorien verteilen</h2>
+            <p style="margin:5px 0 0;font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.45;">
+              Tipp: Über das kleine Feld <strong>⇄</strong> unter einer Kategorie wechselst du zwischen <strong>Wachsender Topf</strong> (spart in dieser Kategorie weiter) und <strong>Überschuss → Puffer</strong> (wie bei Sauna voreingestellt). Kategorien kannst du später im Plan-Tab jederzeit hinzufügen oder anpassen.
+            </p>
           </div>
 
           <div class="card card-compact ob-sticky-status">
@@ -279,9 +301,11 @@ export function mountOnboarding(rootEl, store, { onRequestImport, onToast }) {
         const nextForward = !surplusTargets[id];
         surplusTargets[id] = nextForward ? 'cat_puffer' : null;
         btn.classList.toggle('is-forward', nextForward);
-        btn.innerHTML = nextForward
-          ? `${icon('cornerDownRight', 11, 'inline-icon')} Überschuss → Puffer`
-          : 'Wachsender Topf';
+        btn.innerHTML = `${
+          nextForward
+            ? `${icon('cornerDownRight', 11, 'inline-icon')} Überschuss → Puffer`
+            : `${icon('piggy', 11, 'inline-icon')} Wachsender Topf`
+        }<span class="ob-rule-swap" aria-hidden="true">⇄</span>`;
       });
     });
 

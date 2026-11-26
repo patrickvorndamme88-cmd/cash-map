@@ -199,7 +199,8 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       } else if (txType === 'income') {
         if (selectedCatId && statMap.has(selectedCatId)) {
           const st = statMap.get(selectedCatId);
-          const newPot = roundCents(st.potBalance + amountVal);
+          const origIncome = isEdit && editTx.type === 'income' && editTx.categoryId === selectedCatId ? editTx.amount : 0;
+          const newPot = roundCents(st.potBalance - origIncome + amountVal);
           previewText = `Gutschrift in ${st.category.name}: ${formatMoney(newPot, { privacy, signed: true })}`;
           previewColor = 'var(--positive)';
         } else {
@@ -213,7 +214,9 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
           previewText = 'Bitte zwei unterschiedliche Töpfe wählen';
           previewColor = 'var(--warning)';
         } else if (fromSt && toSt) {
-          previewText = `${fromSt.category.name}: ${formatMoney(fromSt.potBalance - amountVal, { privacy, compact: true })} → ${toSt.category.name}: ${formatMoney(toSt.potBalance + amountVal, { privacy, compact: true })}`;
+          const origFrom = isEdit && editTx.type === 'transfer' && editTx.fromCategoryId === fromCatId ? editTx.amount : 0;
+          const origTo = isEdit && editTx.type === 'transfer' && editTx.toCategoryId === toCatId ? editTx.amount : 0;
+          previewText = `${fromSt.category.name}: ${formatMoney(fromSt.potBalance + origFrom - amountVal, { privacy, compact: true })} → ${toSt.category.name}: ${formatMoney(toSt.potBalance - origTo + amountVal, { privacy, compact: true })}`;
           previewColor = 'var(--accent)';
         }
       }
@@ -557,19 +560,21 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       }
     }
 
-    // Savings goal forecast
+    // Savings goal forecast (includes incoming monthly surplus sweeps like Sauna -> Puffer!)
     let goalBlock = '';
-    if (cat.goalAmount && cat.goalAmount > 0) {
+    if (cat.goalAmount && cat.goalAmount > 0 && !stat.surplusTarget) {
       const goal = cat.goalAmount;
       const pct = Math.max(0, Math.min(100, (stat.potBalance / goal) * 100));
-      const avgDiff = roundCents(history.reduce((s, h) => s + h.monthDiff + 0, 0) / Math.max(1, history.length));
+      const avgGrowth = roundCents(
+        history.reduce((s, h) => s + h.monthDiff + (h.sweptIn || 0), 0) / Math.max(1, history.length)
+      );
       let forecast;
       if (stat.potBalance >= goal) {
         forecast = 'Sparziel erreicht – stark!';
-      } else if (avgDiff > 0) {
-        const monthsNeeded = Math.ceil((goal - stat.potBalance) / avgDiff);
+      } else if (avgGrowth > 0) {
+        const monthsNeeded = Math.ceil((goal - stat.potBalance) / avgGrowth);
         forecast = monthsNeeded <= 120
-          ? `Bei Ø ${formatMoney(avgDiff, { privacy, signed: true, compact: true })} pro Monat erreichst du es voraussichtlich im ${formatMonthLong(shiftMonthKey(snapshot.monthKey, monthsNeeded))}.`
+          ? `Bei Ø ${formatMoney(avgGrowth, { privacy, signed: true, compact: true })} pro Monat erreichst du es voraussichtlich im ${formatMonthLong(shiftMonthKey(snapshot.monthKey, monthsNeeded))}.`
           : 'Bei deinem aktuellen Tempo dauert es noch über 10 Jahre.';
       } else {
         forecast = 'Aktuell wächst dieser Topf nicht – erhöhe das Budget oder gib etwas weniger aus.';
@@ -753,7 +758,7 @@ export function createSheetManager(sheetRoot, store, { onToast }) {
       <!-- 6-Month Chart -->
       <div class="card card-compact" style="display:flex;flex-direction:column;gap:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:var(--text-xs);font-weight:700;color:var(--text-secondary);">6-Monats-Verlauf (Budget vs. Ausgabe)</span>
+          <span style="font-size:var(--text-xs);font-weight:700;color:var(--text-secondary);">${history.length > 1 ? `Verlauf (${history.length} Monate)` : 'Aktueller Monat'} · Budget vs. Ausgabe</span>
           <span style="font-size:var(--text-xs);color:var(--text-tertiary);">Ø <strong class="money" style="color:var(--text-primary);">${escapeHtml(formatMoney(avgSpent, { privacy, compact: true }))}</strong></span>
         </div>
         ${renderCategoryHistoryChart(history, cat.color, { privacy })}

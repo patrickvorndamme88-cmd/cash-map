@@ -47,7 +47,9 @@ export function openMonthPicker(sheets, store, { onToast }) {
         const v = Math.round(snap.totalMonthDiff);
         valHtml = `<span class="month-tile-val money ${v >= 0 ? 'text-pos' : 'text-neg'}">${escapeHtml(formatMoney(v, { privacy, signed: true, compact: true }))}</span>`;
       } else if (!disabled && isFuture) {
-        valHtml = '<span class="month-tile-val">Prognose</span>';
+        valHtml = mk === min
+          ? '<span class="month-tile-val text-pos">Start</span>'
+          : '<span class="month-tile-val">Prognose</span>';
       }
 
       tiles.push(`

@@ -144,10 +144,13 @@ export function renderCashFlowSankey(snapshot, { mode = 'plan', privacy = false 
   const nodesSvg = [];
 
   // Source node
+  const isOverIncome = !isPlan && snapshot.netOutflow > snapshot.totalIncome + 0.01;
+  const srcLabel = isPlan ? 'Nettogehalt' : isOverIncome ? 'Einn. + Töpfe' : 'Einnahmen';
+  const srcVal = isPlan ? snapshot.salary : Math.max(snapshot.totalIncome, snapshot.netOutflow);
   nodesSvg.push(`
     <rect x="${colLeftX}" y="${srcY.toFixed(1)}" width="${nodeW}" height="${srcH.toFixed(1)}" rx="5" fill="url(#sankeySrcGrad)" />
-    <text x="${colLeftX}" y="${(srcY - 6).toFixed(1)}" class="sankey-node-label">${isPlan ? 'Nettogehalt' : 'Einnahmen'}</text>
-    <text x="${colLeftX}" y="${(srcY + srcH + 13).toFixed(1)}" class="sankey-node-val">${escapeHtml(formatMoney(isPlan ? snapshot.salary : snapshot.totalIncome, { privacy, compact: true }))}</text>
+    <text x="${colLeftX}" y="${(srcY - 6).toFixed(1)}" class="sankey-node-label">${srcLabel}</text>
+    <text x="${colLeftX}" y="${(srcY + srcH + 13).toFixed(1)}" class="sankey-node-val">${escapeHtml(formatMoney(srcVal, { privacy, compact: true }))}</text>
   `);
 
   // Links: Source -> Groups

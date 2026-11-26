@@ -3,7 +3,7 @@
 // ==========================================================================
 
 import { icon } from '../icons.js';
-import { formatMoney, formatDateGroupLabel, formatMonthLong, escapeHtml, roundCents } from '../format.js';
+import { formatMoney, formatPlainNumber, formatDateGroupLabel, formatMonthLong, escapeHtml, roundCents } from '../format.js';
 
 export function renderTransactionsResults(state, ui, snapshot) {
   const privacy = state.settings.privacyMode;
@@ -23,7 +23,8 @@ export function renderTransactionsResults(state, ui, snapshot) {
       const cat = catMap.get(tx.categoryId);
       const fromCat = catMap.get(tx.fromCategoryId);
       const toCat = catMap.get(tx.toCategoryId);
-      const hay = `${tx.note || ''} ${cat?.name || ''} ${fromCat?.name || ''} ${toCat?.name || ''} ${tx.amount}`.toLowerCase();
+      const amtDe = formatPlainNumber(tx.amount);
+      const hay = `${tx.note || ''} ${cat?.name || ''} ${fromCat?.name || ''} ${toCat?.name || ''} ${tx.amount} ${amtDe} ${amtDe.replace(/\./g, '')}`.toLowerCase();
       if (!hay.includes(query)) return false;
     }
     return true;

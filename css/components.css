@@ -776,7 +776,7 @@
   align-items: center;
 }
 
-.search-box svg {
+.search-box > svg {
   position: absolute;
   left: 13px;
   width: 17px;
@@ -2137,10 +2137,12 @@ input[type="month"].input {
   align-items: center;
   gap: 4px;
   margin-top: 3px;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: var(--radius-pill);
-  font-size: 0.67rem;
+  font-size: 0.65rem;
   font-weight: 650;
+  white-space: nowrap;
+  max-width: 100%;
   background: var(--surface-2);
   color: var(--text-tertiary);
   border: 1px solid var(--border-subtle);
@@ -2155,4 +2157,10 @@ input[type="month"].input {
 
 .ob-rule-pill:active {
   transform: scale(0.95);
+}
+
+.ob-rule-swap {
+  margin-left: 2px;
+  opacity: 0.65;
+  font-size: 0.72rem;
 }

@@ -177,10 +177,12 @@ export function parseAndValidateBackup(rawText) {
 
   // Normalize salary history
   const normalizedSalaryHistory = Array.isArray(payload.salaryHistory) && payload.salaryHistory.length > 0
-    ? payload.salaryHistory.map((s) => ({
-        effectiveFrom: String(s.effectiveFrom || defaultMonth).slice(0, 7),
-        amount: roundCents(Number(s.amount) || 0),
-      }))
+    ? payload.salaryHistory
+        .map((s) => ({
+          effectiveFrom: String(s.effectiveFrom || defaultMonth).slice(0, 7),
+          amount: roundCents(Number(s.amount) || 0),
+        }))
+        .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0))
     : [{ effectiveFrom: defaultMonth, amount: roundCents(Number(payload.netSalary) || 3000) }];
 
   const normalizedOverrides = {};

@@ -410,9 +410,14 @@ document.addEventListener('keydown', (e) => {
     t.blur();
     return;
   }
-  // Desktop convenience: ← / → switch months
+  // Desktop convenience: ← / → switch months, Enter/Space opens focused category card
   const tag = t.tagName;
   if (isOverlayOpen() || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if ((e.key === 'Enter' || e.key === ' ') && t.hasAttribute && t.hasAttribute('data-open-category')) {
+    e.preventDefault();
+    sheets.openCategoryDetailSheet({ snapshot: lastSnapshot, categoryId: t.getAttribute('data-open-category') });
+    return;
+  }
   if (e.key === 'ArrowLeft') shiftMonth(-1);
   else if (e.key === 'ArrowRight') shiftMonth(1);
 });

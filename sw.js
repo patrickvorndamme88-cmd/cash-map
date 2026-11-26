@@ -2,7 +2,7 @@
 // cash-map — Offline-First Service Worker (GitHub Pages Subpath Compatible)
 // ==========================================================================
 
-const CACHE_NAME = 'cash-map-v1.2.0';
+const CACHE_NAME = 'cash-map-v1.2.2';
 
 const PRECACHE_ASSETS = [
   './',

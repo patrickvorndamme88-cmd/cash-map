@@ -144,9 +144,11 @@ function renderHero(snapshot, privacy) {
     : 0;
   const isOverBudget = snapshot.netOutflow > snapshot.totalBudgeted && snapshot.totalBudgeted > 0;
 
-  const pill = snapshot.isFuture
-    ? `<span class="hero-pill">${icon('calendar', 12)} Prognose</span>`
-    : `<span class="hero-pill ${snapshot.monthlyCashflowDiff >= 0 ? 'is-pos' : 'is-neg'} money">Monat ${escapeHtml(formatMoney(snapshot.monthlyCashflowDiff, { privacy, signed: true, compact: true }))}</span>`;
+  const pill = snapshot.isCleanFutureStart
+    ? `<span class="hero-pill is-pos">${icon('calendar', 12)} Startmonat</span>`
+    : snapshot.isFuture
+      ? `<span class="hero-pill">${icon('calendar', 12)} Prognose</span>`
+      : `<span class="hero-pill ${snapshot.monthlyCashflowDiff >= 0 ? 'is-pos' : 'is-neg'} money">Monat ${escapeHtml(formatMoney(snapshot.monthlyCashflowDiff, { privacy, signed: true, compact: true }))}</span>`;
 
   const countAttrs = privacy ? '' : `data-countup="${snapshot.totalPotBalance}" data-countup-key="hero-pot"`;
 
@@ -171,7 +173,7 @@ function renderHero(snapshot, privacy) {
 
         <div class="hero-main-amount money" ${countAttrs}>${escapeHtml(formatMoney(snapshot.totalPotBalance, { privacy }))}</div>
         <div class="hero-subline">
-          <span>${snapshot.isFuture ? 'Prognose' : 'Stand'} Ende ${escapeHtml(formatMonthLong(snapshot.monthKey))}</span>
+          <span>${snapshot.isCleanFutureStart ? 'Start' : snapshot.isFuture ? 'Prognose' : 'Stand'} Ende ${escapeHtml(formatMonthLong(snapshot.monthKey))}</span>
           <span style="opacity:0.45;">|</span>
           <span>Spar- &amp; Investquote: <strong style="color:#FFFFFF;">${privacy ? '•• %' : `${Math.round(snapshot.savingsRate)} %`}</strong></span>
         </div>
@@ -271,9 +273,12 @@ function renderCategoryCard(stat, snapshot, privacy) {
       : !isPotZero
         ? `Konto ${formatMoney(stat.potBalance, { privacy, signed: true })}`
         : `${formatMoney(stat.budget, { privacy, compact: true })} / Monat`;
+    const sweptBadge = stat.sweptIn > 0.005
+      ? ` · <strong class="text-pos">+${escapeHtml(formatMoney(stat.sweptIn, { privacy, compact: true }))} Zufluss</strong>`
+      : '';
     subline = status === 'booked'
-      ? `<span>Dauerauftrag am ${stat.bookingDay}. · gebucht</span>`
-      : `<span>Dauerauftrag am ${stat.bookingDay}.${status === 'open' ? ' · noch offen' : ''}</span>`;
+      ? `<span>Dauerauftrag am ${stat.bookingDay}. · gebucht${sweptBadge}</span>`
+      : `<span>Dauerauftrag am ${stat.bookingDay}.${status === 'open' ? ' · noch offen' : ''}${sweptBadge}</span>`;
     rightHtml = `${chip}<span class="pot-caption money ${isPotNeg ? 'text-neg' : ''}">${escapeHtml(caption)}</span>`;
     diffHtml = status === 'open'
       ? `<span class="cat-month-diff text-warn">noch nicht gebucht</span>`
